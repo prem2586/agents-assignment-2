@@ -20,65 +20,6 @@ from workspace_assistant.tools.mcp_tools import deferred_mcp_tools
 from workspace_assistant.config.settings import Settings
 from workspace_assistant.tools.tasks_tools import tasks_tools  # or tasks_tools
 
-# Agent for Tasks
-# def create_agent() -> LlmAgent:
-#     settings = Settings()
-
-#     instruction = """
-#     You are a Google Workspace and GitHub assistant.
-
-#     Google Tasks:
-#     - List tasks.
-#     - Create tasks.
-#     - Complete tasks.
-#     - Update task details.
-#     - Delete tasks.
-#     - Use Google Tasks tools for task operations.
-#     - Confirm before deleting tasks.
-
-#     Always use the appropriate tools.
-#     Never invent task IDs or repository information.
-#     """
-
-#     return LlmAgent(
-#         name="workspace_assistant",
-#         model=settings.model_name,
-#         instruction=instruction,
-#         tools=tasks_tools,
-#     )
-
-#Agent for search github tools and defer loading all tools
-# def create_agent() -> LlmAgent:
-#     settings = Settings()
-
-
-#     instruction = """
-#     You are a GitHub assistant.
-
-#     GITHUB WORKFLOW:
-#         1. For a GitHub request, call search_github_tools ONCE.
-#         2. Select the most relevant tool from the results.
-#         3. Call call_github_tool using its exact name and input schema.
-#         4. If execution succeeds:
-#         - Read the returned data.
-#         - Answer the user's original question.
-#         - STOP calling tools.
-#         5. If execution fails:
-#         - Explain the error.
-#         - Do not repeatedly retry with different search terms.
-#         6. Never call search_github_tools more than once
-#         for the same user request.
-#         7. Never use Google Tasks tools for GitHub requests.
-
-#     Never invent results.
-#     """
-
-#     return LlmAgent(
-#         name="workspace_assistant",
-#         model=settings.model_name,
-#         instruction=instruction,
-#         tools=mcp_tools,
-#     )
 
 
 #agent combining both task and github usecase
