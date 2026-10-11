@@ -14,6 +14,11 @@ from dotenv import load_dotenv
 from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp import StdioServerParameters
+from mcp import ClientSession
+from mcp.client.stdio import stdio_client
+from google.adk.tools import FunctionTool
+import traceback
+
 
 load_dotenv()
 
@@ -29,21 +34,39 @@ MCP_CONFIG_PATH = Path(__file__).parent.parent / "config" / "mcp_servers.json"
 #
 # Example structure:
 #
-# def get_github_mcp_toolset() -> McpToolset:
-#     token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-#     if not token:
-#         raise ValueError("GITHUB_PERSONAL_ACCESS_TOKEN not set in .env")
-#
-#     server_params = StdioServerParameters(
-#         command="npx",
-#         args=["-y", "@modelcontextprotocol/server-github"],
-#         env={"GITHUB_PERSONAL_ACCESS_TOKEN": token}
-#     )
-#
-#     return McpToolset(
-#         connection_params=StdioConnectionParams(server_params=server_params)
-#     )
+def get_github_mcp_toolset() -> McpToolset:
+    token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+    if not token:
+        raise ValueError("GITHUB_PERSONAL_ACCESS_TOKEN not set in .env")
 
+    server_params = StdioServerParameters(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-github"],
+        env={"GITHUB_PERSONAL_ACCESS_TOKEN": token}
+    )
+
+    return McpToolset(
+        connection_params=StdioConnectionParams(server_params=server_params)
+    )
+
+def get_github_mcp_toolset_frequent() -> McpToolset:
+    token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+    if not token:
+        raise ValueError("GITHUB_PERSONAL_ACCESS_TOKEN not set in .env")
+
+    server_params = StdioServerParameters(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-github"],
+        env={"GITHUB_PERSONAL_ACCESS_TOKEN": token}
+    )
+
+    return McpToolset(
+        connection_params=StdioConnectionParams(server_params=server_params),
+        tool_filter=[
+                    "search_repositories",
+                    "get_file_contents",
+        ]
+    )
 
 # =============================================================================
 # OPTIONAL: File-based Configuration
@@ -116,41 +139,178 @@ def load_mcp_config() -> dict:
 #
 # Example structure:
 #
-# from google.adk.tools import FunctionTool
-#
-# def search_github_tools(query: str) -> dict:
-#     """Search for available GitHub tools by keyword.
-#
-#     Args:
-#         query: Search term (e.g., "issues", "repository", "pull request")
-#
-#     Returns:
-#         dict with matching tool names and descriptions
-#     """
-#     # TODO: Implement tool search logic
-#     pass
-#
-#
+
+
+async def search_github_tools(query: str) -> dict:
+    """Search available GitHub MCP tools by keyword.
+
+    Args:
+        query: Search term such as repository, issues,
+            or pull request.
+
+    Returns:
+        Matching GitHub tool names and descriptions.
+    """
+    toolset = get_github_mcp_toolset()
+
+    try:
+        tools = await toolset.get_tools()
+
+        query_words = query.lower().strip().split()
+        matches = []
+
+        for tool in tools:
+            name = tool.name
+            description = getattr(tool, "description", "") or ""
+
+            searchable = f"{name} {description}".lower()
+
+            if any(word in searchable for word in query_words):
+                matches.append({
+                    "name": name,
+                    "description": description,
+                })
+
+        return {
+            "status": "success",
+            "total_tools": len(tools),
+            "matching_tools": matches[:10],
+            "count": len(matches),
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": f"{type(e).__name__}: {e}",
+            "matching_tools": [],
+        }
+
+    finally:
+        await toolset.close()
+
 # def get_github_mcp_toolset_deferred() -> McpToolset:
 #     """Create McpToolset with defer_loading for on-demand tool discovery."""
 #     token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
 #     if not token:
 #         raise ValueError("GITHUB_PERSONAL_ACCESS_TOKEN not set")
-#
+
 #     server_params = StdioServerParameters(
 #         command="npx",
 #         args=["-y", "@modelcontextprotocol/server-github"],
 #         env={"GITHUB_PERSONAL_ACCESS_TOKEN": token}
 #     )
-#
+
 #     return McpToolset(
 #         connection_params=StdioConnectionParams(server_params=server_params),
 #         defer_loading=True  # Key: tools loaded on-demand
 #     )
 
+def get_github_mcp_toolset_deferred() -> McpToolset:
+    """Expose frequently used GitHub tools.
+
+    Other GitHub operations are discovered through
+    search_github_tools and executed through call_github_tool.
+
+    This approximates deferred tool loading using tool filtering.
+    """
+    token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+    server_params = StdioServerParameters(
+            command="npx",
+            args=["-y", "@modelcontextprotocol/server-github"],
+            env={"GITHUB_PERSONAL_ACCESS_TOKEN": token}
+    )
+    return McpToolset(
+        connection_params=StdioConnectionParams(
+            server_params=server_params
+        ),
+        tool_filter=[
+            "search_repositories",
+            "get_file_contents",
+        ],
+        #Not using this since its not supported or have to go for custom implementation
+        #defer_loading=True  # Key: tools loaded on-demand
+    )
+
+
+
+async def call_github_tool(
+    tool_name: str,
+    arguments: dict,
+) -> dict:
+    """Execute a GitHub MCP tool by name.
+
+    Args:
+        tool_name: Exact GitHub MCP tool name returned by search_github_tools.
+        arguments: Arguments required by the selected MCP tool.
+
+    Returns:
+        Dictionary containing the execution result or error.
+    """
+    token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+
+    if not token:
+        return {
+            "status": "error",
+            "error": "GITHUB_PERSONAL_ACCESS_TOKEN is missing",
+        }
+
+    server_params = StdioServerParameters(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-github"],
+        env={
+            **os.environ,
+            "GITHUB_PERSONAL_ACCESS_TOKEN": token,
+        },
+    )
+
+    try:
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+
+                available = await session.list_tools()
+                tool_names = {
+                    tool.name for tool in available.tools
+                }
+
+                if tool_name not in tool_names:
+                    return {
+                        "status": "error",
+                        "error": f"Unknown GitHub tool: {tool_name}",
+                        "available_tools": sorted(tool_names),
+                    }
+
+                result = await session.call_tool(
+                    name=tool_name,
+                    arguments=arguments,
+                )
+
+                return {
+                    "status": "error" if getattr(result, "isError", False) else "success",
+                    "tool_name": tool_name,
+                    "result": result.model_dump(
+                        mode="json",
+                        exclude_none=True,
+                    ),
+                }
+
+    except Exception as e:
+        print("GitHub MCP error:")
+        traceback.print_exception(type(e), e, e.__traceback__)
+
+        return {
+            "status": "error",
+            "error_type": type(e).__name__,
+            "error": str(e),
+        }
+
+
 
 mcp_tools = [
-    # Add your McpToolset here after implementing one of the options above
-    # Example: get_github_mcp_toolset()
+   search_github_tools,
+   call_github_tool,
+   #get_github_mcp_toolset(),
+   #get_github_mcp_toolset_frequent(),
+   get_github_mcp_toolset_deferred()
     # Example: get_github_mcp_toolset_from_config()
 ]

@@ -1,6 +1,12 @@
 # Credentials (NEVER commit these)
 config/credentials/*.json
 
+# Google ADK runtime files
+.adk/
+*.db
+*.db-shm
+*.db-wal
+
 # Environment
 .env
 .env.local
