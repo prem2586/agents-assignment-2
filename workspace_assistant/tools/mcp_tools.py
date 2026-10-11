@@ -307,10 +307,12 @@ async def call_github_tool(
 
 
 mcp_tools = [
+   get_github_mcp_toolset()
+    # Example: get_github_mcp_toolset_from_config()
+]
+
+deferred_mcp_tools = [
    search_github_tools,
    call_github_tool,
-   #get_github_mcp_toolset(),
-   #get_github_mcp_toolset_frequent(),
    get_github_mcp_toolset_deferred()
-    # Example: get_github_mcp_toolset_from_config()
 ]
