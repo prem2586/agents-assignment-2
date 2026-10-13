@@ -145,7 +145,7 @@ def create_agent_with_tool_search() -> LlmAgent:
         name="workspace_assistant",
         model=settings.model_name,
         instruction=instruction,
-        tools=deferred_mcp_tools,
+        tools=tasks_tools + deferred_mcp_tools,
     )
 
 root_agent = create_agent_with_tool_search()
