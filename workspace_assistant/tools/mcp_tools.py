@@ -158,18 +158,43 @@ async def search_github_tools(query: str) -> dict:
 
         query_words = query.lower().strip().split()
         matches = []
+        stopwords = {
+            "a", "an", "the", "in", "on", "my", "me",
+            "of", "to", "for", "about", "and", "show"
+        }
+
+        words = [
+            w for w in query.lower().split()
+            if w not in stopwords
+        ]
+
+        scored = []
 
         for tool in tools:
-            name = tool.name
-            description = getattr(tool, "description", "") or ""
+            text = f"{tool.name} {tool.description or ''}".lower()
+            score = sum(w in text for w in words)
 
-            searchable = f"{name} {description}".lower()
+            if score:
+                scored.append((score, tool))
 
-            if any(word in searchable for word in query_words):
-                matches.append({
-                    "name": name,
-                    "description": description,
-                })
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+
+        print("\n=== GitHub MCP Tool Search Ranking ===")
+        print(f"Search query: {query}")
+
+        for rank, (score, tool) in enumerate(scored[:5], start=1):
+            print(f"{rank}. {tool.name} | Score: {score}")
+
+        matches = [
+            {
+                "name": t.name,
+                "description": t.description or "",
+                "input_schema": (
+                    t.raw_mcp_tool.model_dump(by_alias=True)["inputSchema"]
+                ),
+            }
+            for _, t in scored[:5]
+        ]
 
         return {
             "status": "success",
